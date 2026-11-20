@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">   
+<head>
+    
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D PC Hardware Disassembly (Transparent Background)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent !important;
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: transparent !important;
+      cursor: grab;
+    }
+
+    canvas:active {
+      cursor: grabbing;
+    }
+
+    /* Top Part Selector Bar */
+    .top-bar {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px;
+      max-width: 95vw;
+      z-index: 10;
+    }
+
+    .pill {
+      background: rgba(15, 23, 42, 0.82);
+      color: #f8fafc;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: all 0.2s ease;
+    }
+
+    .pill:hover {
+      background: rgba(30, 41, 59, 0.95);
+      border-color: #38bdf8;
+    }
+
+    .pill.active {
+      background: #0284c7;
+      border-color: #7dd3fc;
+      color: #ffffff;
+      box-shadow: 0 0 12px rgba(2, 132, 199, 0.6);
+    }
+
+    /* Info Card (Appears when a part is selected) */
+    .info-card {
+      position: fixed;
+      right: 20px;
+      top: 76px;
+      width: 280px;
+      background: rgba(15, 23, 42, 0.88);
+      color: #f1f5f9;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 14px;
+      padding: 16px;
+      backdrop-filter: blur(10px);
+      display: none;
+      z-index: 10;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+    }
+
+    .info-card.visible {
+      display: block;
+    }
+
+    .info-card h3 {
+      font-size: 16px;
+      color: #38bdf8;
+      margin-bottom: 6px;
+    }
+
+    .info-card p {
+      font-size: 13px;
+      line-height: 1.45;
+      color: #cbd5e1;
+      margin-bottom: 12px;
+    }
+
+    .info-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-small {
+      flex: 1;
+      padding: 7px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(30, 41, 59, 0.9);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-small:hover {
+      background: #0284c7;
+      border-color: #38bdf8;
+    }
+
+    /* Bottom Disassembly Control Bar */
+    .bottom-controls {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      padding: 12px 18px;
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+      color: #f8fafc;
+      z-index: 10;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .bottom-controls label {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    input[type="range"] {
+      width: 170px;
+      accent-color: #38bdf8;
+      cursor: pointer;
+    }
+
+    .action-btn {
+      background: #0284c7;
+      color: #fff;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.2s;
+    }
+
+    .action-btn:hover {
+      background: #0369a1;
+    }
+
+    .action-btn.secondary {
+      background: rgba(51, 65, 85, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+    }
+
+    .action-btn.secondary:hover {
+      background: rgba(71, 85, 105, 0.95);
+    }
+  </style>
+
+  <!-- Three.js Import Map -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+</head>
+<body>
+
+    <a-scene
+    mindar-image="imageTargetSrc: ./asset/targets.mind;"
+    embedded
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false">
+
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <a-entity id="computerTarget" mindar-image-target="targetIndex: 0">
+    </a-entity>
+
+</a-scene>
+
+  <!-- Top Part Filter Pills -->
+  <div class="top-bar" id="partBar">
+    <button class="pill active" data-part="all">Full System</button>
+    <button class="pill" data-part="glass">Glass Panel</button>
+    <button class="pill" data-part="fans">Front Fans</button>
+    <button class="pill" data-part="gpu">GPU (RTX)</button>
+    <button class="pill" data-part="cooler">CPU Cooler</button>
+    <button class="pill" data-part="ram">DDR5 RAM</button>
+    <button class="pill" data-part="ssd">M.2 SSD</button>
+    <button class="pill" data-part="cpu">CPU</button>
+    <button class="pill" data-part="mobo">Motherboard</button>
+    <button class="pill" data-part="psu">PSU</button>
+    <button class="pill" data-part="case">Chassis</button>
+  </div>
+
+  <!-- Selected Component Details -->
+  <div class="info-card" id="infoCard">
+    <h3 id="partTitle">Component Name</h3>
+    <p id="partDesc">Component hardware description goes here.</p>
+    <div class="info-actions">
+      <button class="btn-small" id="isolateBtn">Isolate Part</button>
+      <button class="btn-small" id="resetSelectionBtn">Show All</button>
+    </div>
+  </div>
+
+  <!-- Bottom Disassembly Controls -->
+  <div class="bottom-controls">
+    <label for="explodeSlider">Disassemble:</label>
+    <input type="range" id="explodeSlider" min="0" max="1" step="0.01" value="0" />
+    <button class="action-btn" id="toggleExplodeBtn">Disassemble All</button>
+    <button class="action-btn secondary" id="resetViewBtn">Reset View</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // 1. SCENE & TRANSPARENT RENDERER SETUP
+    const scene = new THREE.Group();
+
+    const arTarget = document.querySelector("#computerTarget");
+
+arTarget.addEventListener('targetFound', () => {
+    console.log("COMPUTER SYSTEM DETECTED!");
+
+  if (!scene.parent) {
+    arTarget.object3D.add(scene);
+    scene.scale.setScalar(0.2);
+  }
+});
+   // Ensures no background
+
+   
+
+   
+
+    // 2. STUDIO LIGHTING (No environment background)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.3);
+    scene.add(ambientLight);
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    keyLight.position.set(8, 12, 10);
+    scene.add(keyLight);
+
+    const fillLight = new THREE.DirectionalLight(0x93c5fd, 1.2);
+    fillLight.position.set(-10, 4, -6);
+    scene.add(fillLight);
+
+    const rimLight = new THREE.DirectionalLight(0xfde68a, 1.0);
+    rimLight.position.set(0, -8, 8);
+    scene.add(rimLight);
+
+    // 3. SHARED MATERIALS
+    const matSteelDark = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.75, roughness: 0.35 });
+    const matSteelBlack = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.65, roughness: 0.45 });
+    const matAluminum = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.88, roughness: 0.22 });
+    const matCopper = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.9, roughness: 0.2 });
+    const matGold = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.95, roughness: 0.18 });
+    const matPCB = new THREE.MeshStandardMaterial({ color: 0x090d16, metalness: 0.25, roughness: 0.6 });
+    const matPlastic = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.1, roughness: 0.5 });
+    const matRGBCyan = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 1.8 });
+    const matRGBMagenta = new THREE.MeshStandardMaterial({ color: 0xe879f9, emissive: 0xc026d3, emissiveIntensity: 1.6 });
+    const matGlass = new THREE.MeshPhysicalMaterial({
+      color: 0x94a3b8,
+      transparent: true,
+      opacity: 0.26,
+      roughness: 0.08,
+      metalness: 0.1,
+      transmission: 0.65,
+      side: THREE.DoubleSide
+    });
+
+    // 4. HARDWARE COMPONENT REGISTRY
+    const parts = {};
+    const clickableMeshes = [];
+    const spinningFans = [];
+
+    function registerPart(id, name, description, basePos, explodeOffset) {
+      const group = new THREE.Group();
+      group.position.copy(basePos);
+      scene.add(group);
+
+      parts[id] = {
+        id,
+        name,
+        description,
+        group,
+        basePos: basePos.clone(),
+        explodeOffset: explodeOffset.clone(),
+        currentOffset: new THREE.Vector3()
+      };
+      return group;
+    }
+
+    function tagClickable(group, partId) {
+      group.traverse((child) => {
+        if (child.isMesh) {
+          child.userData.partId = partId;
+          clickableMeshes.push(child);
+        }
+      });
+    }
+
+    // --- PART 1: MID-TOWER ATX CHASSIS ---
+    const caseGroup = registerPart(
+      'case',
+      'Mid-Tower ATX Chassis',
+      'Powder-coated steel frame with motherboard tray, cable routing cutouts, and bottom PSU shroud.',
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, 0, 0)
+    );
+    // Back panel, top panel, bottom panel, motherboard tray, PSU shroud
+    const backWall = new THREE.Mesh(new THREE.BoxGeometry(0.12, 4.2, 2.0), matSteelDark);
+    backWall.position.set(-2.05, 0.2, 0);
+    const topPanel = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.12, 2.0), matSteelDark);
+    topPanel.position.set(0, 2.25, 0);
+    const bottomPanel = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.14, 2.0), matSteelDark);
+    bottomPanel.position.set(0, -1.85, 0);
+    const moboTray = new THREE.Mesh(new THREE.BoxGeometry(4.0, 4.0, 0.08), matSteelBlack);
+    moboTray.position.set(0, 0.2, -0.92);
+    const psuShroud = new THREE.Mesh(new THREE.BoxGeometry(4.05, 0.95, 1.85), matSteelDark);
+    psuShroud.position.set(0, -1.32, -0.02);
+    caseGroup.add(backWall, topPanel, bottomPanel, moboTray, psuShroud);
+    tagClickable(caseGroup, 'case');
+
+    // --- PART 2: TEMPERED GLASS SIDE PANEL ---
+    const glassGroup = registerPart(
+      'glass',
+      'Tempered Glass Side Panel',
+      '4mm tinted tempered glass side window with black ceramic borders and steel thumbscrews.',
+      new THREE.Vector3(0, 0.2, 1.02),
+      new THREE.Vector3(0, 0, 2.6)
+    );
+    const glassPane = new THREE.Mesh(new THREE.BoxGeometry(4.15, 4.05, 0.05), matGlass);
+    glassGroup.add(glassPane);
+    // Corner thumbscrews
+    [[-1.9, 1.85], [1.9, 1.85], [-1.9, -1.85], [1.9, -1.85]].forEach(([x, y]) => {
+      const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.12, 16), matAluminum);
+      screw.rotation.x = Math.PI / 2;
+      screw.position.set(x, y, 0.03);
+      glassGroup.add(screw);
+    });
+    tagClickable(glassGroup, 'glass');
+
+    // --- PART 3: FRONT INTAKE FANS & MESH ---
+    const fansGroup = registerPart(
+      'fans',
+      '3x 120mm ARGB Intake Fans',
+      'High-airflow PWM front cooling fans with addressable RGB rings and magnetic dust filter.',
+      new THREE.Vector3(2.12, 0.45, 0),
+      new THREE.Vector3(2.3, 0, 0)
+    );
+    for (let i = 0; i < 3; i++) {
+      const yPos = 1.15 - i * 1.15;
+      const housing = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.08, 1.08), matPlastic);
+      housing.position.set(0, yPos, 0);
+      const rgbRing = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.03, 12, 32), matRGBCyan);
+      rgbRing.rotation.y = Math.PI / 2;
+      rgbRing.position.set(0.08, yPos, 0);
+
+      const bladeGroup = new THREE.Group();
+      bladeGroup.position.set(0, yPos, 0);
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.14, 16), matSteelBlack);
+      hub.rotation.z = Math.PI / 2;
+      bladeGroup.add(hub);
+      for (let b = 0; b < 7; b++) {
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.36, 0.1), matAluminum);
+        blade.position.y = 0.24;
+        blade.rotation.y = 0.45;
+        const pivot = new THREE.Group();
+        pivot.rotation.x = (b / 7) * Math.PI * 2;
+        pivot.add(blade);
+        bladeGroup.add(pivot);
+      }
+      spinningFans.push({ mesh: bladeGroup, axis: 'x' });
+      fansGroup.add(housing, rgbRing, bladeGroup);
+    }
+    tagClickable(fansGroup, 'fans');
+
+    // --- PART 4: ATX MOTHERBOARD ---
+    const moboGroup = registerPart(
+      'mobo',
+      'Z890 ATX Motherboard',
+      '8-layer PCB with 18+1+2 VRM heatsinks, LGA CPU socket, 4x DDR5 DIMM slots, and PCIe 5.0 x16 slot.',
+      new THREE.Vector3(-0.35, 0.55, -0.82),
+      new THREE.Vector3(0, 0, 0.45)
+    );
+    const moboBoard = new THREE.Mesh(new THREE.BoxGeometry(2.35, 2.85, 0.06), matPCB);
+    // VRM Heatsinks
+    const vrmTop = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.28, 0.24), matAluminum);
+    vrmTop.position.set(-0.35, 1.15, 0.14);
+    const vrmLeft = new THREE.Mesh(new THREE.BoxGeometry(0.32, 1.15, 0.26), matAluminum);
+    vrmLeft.position.set(-0.92, 0.55, 0.15);
+    // CPU Socket Frame
+    const socket = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.68, 0.05), matSteelBlack);
+    socket.position.set(-0.25, 0.55, 0.05);
+    // 4 RAM Slots
+    for (let s = 0; s < 4; s++) {
+      const slot = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.15, 0.09), matPlastic);
+      slot.position.set(0.35 + s * 0.12, 0.55, 0.07);
+      moboGroup.add(slot);
+    }
+    // PCIe x16 Slot
+    const pcieSlot = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.1, 0.11), matAluminum);
+    pcieSlot.position.set(-0.25, -0.35, 0.08);
+    // Chipset Heatsink
+    const chipset = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.65, 0.1), matSteelDark);
+    chipset.position.set(0.55, -0.85, 0.08);
+    moboGroup.add(moboBoard, vrmTop, vrmLeft, socket, pcieSlot, chipset);
+    tagClickable(moboGroup, 'mobo');
+
+    // --- PART 5: 24-CORE PROCESSOR (CPU) ---
+    const cpuGroup = registerPart(
+      'cpu',
+      '24-Core Desktop CPU',
+      'Nickel-plated copper Integrated Heat Spreader (IHS) over multi-die silicon and gold LGA pads.',
+      new THREE.Vector3(-0.6, 1.1, -0.73),
+      new THREE.Vector3(0, 0.35, 1.15)
+    );
+    const cpuSubstrate = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.52, 0.025), new THREE.MeshStandardMaterial({ color: 0x065f46, roughness: 0.4 }));
+    const cpuPads = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.46, 0.01), matGold);
+    cpuPads.position.z = -0.015;
+    const cpuIHS = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.44, 0.035), matAluminum);
+    cpuIHS.position.z = 0.025;
+    cpuGroup.add(cpuSubstrate, cpuPads, cpuIHS);
+    tagClickable(cpuGroup, 'cpu');
+
+    // --- PART 6: DUAL-TOWER CPU AIR COOLER ---
+    const coolerGroup = registerPart(
+      'cooler',
+      'Dual-Tower CPU Air Cooler',
+      '6 sintered copper heatpipes with stacked aluminum fin arrays and a high-static-pressure 120mm PWM fan.',
+      new THREE.Vector3(-0.6, 1.1, -0.25),
+      new THREE.Vector3(0, 0.55, 2.15)
+    );
+    const coldPlate = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.08), matCopper);
+    coldPlate.position.z = -0.4;
+    // Aluminum Fin Stack
+    for (let f = 0; f < 14; f++) {
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.05, 0.015), matAluminum);
+      fin.position.z = -0.2 + f * 0.045;
+      coolerGroup.add(fin);
+    }
+    // Copper Heatpipes
+    [-0.25, 0, 0.25].forEach((x) => {
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.15, 12), matCopper);
+      pipe.position.set(x, 0.05, 0.05);
+      coolerGroup.add(pipe);
+    });
+    // Front Cooler Fan
+    const coolerFanFrame = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.96, 0.16), matSteelBlack);
+    coolerFanFrame.position.z = 0.52;
+    const coolerFanRGB = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.025, 10, 28), matRGBCyan);
+    coolerFanRGB.position.z = 0.61;
+    coolerGroup.add(coldPlate, coolerFanFrame, coolerFanRGB);
+    tagClickable(coolerGroup, 'cooler');
+
+    // --- PART 7: 32GB DDR5 RGB RAM ---
+    const ramGroup = registerPart(
+      'ram',
+      '32GB (2x16GB) DDR5-6400 RAM',
+      'Dual-channel high-speed DDR5 memory modules with anodized aluminum heatspreaders and RGB lightbars.',
+      new THREE.Vector3(0.12, 1.1, -0.62),
+      new THREE.Vector3(0.75, 0.65, 1.65)
+    );
+    [0, 0.24].forEach((offsetX) => {
+      const stick = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.12, 0.34), matAluminum);
+      stick.position.set(offsetX, 0, 0);
+      const lightbar = new THREE.Mesh(new THREE.BoxGeometry(0.075, 1.12, 0.06), matRGBMagenta);
+      lightbar.position.set(offsetX, 0, 0.18);
+      ramGroup.add(stick, lightbar);
+    });
+    tagClickable(ramGroup, 'ram');
+
+    // --- PART 8: 2TB M.2 NVME PCIE 5.0 SSD ---
+    const ssdGroup = registerPart(
+      'ssd',
+      '2TB M.2 NVMe PCIe 5.0 SSD',
+      'Ultra-fast Gen5 NAND flash storage module topped with a finned aluminum thermal heatsink.',
+      new THREE.Vector3(-0.55, 0.45, -0.73),
+      new THREE.Vector3(-0.7, -0.1, 1.55)
+    );
+    const ssdPCB = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.2, 0.02), matPCB);
+    const ssdHeatsink = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.19, 0.07), matSteelDark);
+    ssdHeatsink.position.z = 0.045;
+    ssdGroup.add(ssdPCB, ssdHeatsink);
+    tagClickable(ssdGroup, 'ssd');
+
+    // --- PART 9: RTX TRIPLE-FAN GRAPHICS CARD (GPU) ---
+    const gpuGroup = registerPart(
+      'gpu',
+      'RTX Triple-Fan Graphics Card',
+      'Flagship 3-slot GPU featuring a vapor-chamber heatsink, die-cast metal backplate, and 3 axial fans.',
+      new THREE.Vector3(-0.25, 0.12, -0.05),
+      new THREE.Vector3(0.45, -0.45, 2.2)
+    );
+    const gpuShroud = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.44, 1.05), matSteelDark);
+    const gpuBackplate = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.04, 1.05), matAluminum);
+    gpuBackplate.position.y = 0.24;
+    const gpuRGB = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.04, 0.04), matRGBCyan);
+    gpuRGB.position.set(0, 0.12, 0.54);
+    gpuGroup.add(gpuShroud, gpuBackplate, gpuRGB);
+
+    [-0.72, 0, 0.72].forEach((xPos) => {
+      const fanPivot = new THREE.Group();
+      fanPivot.position.set(xPos, -0.23, 0);
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.04, 16), matAluminum);
+      fanPivot.add(hub);
+      for (let b = 0; b < 7; b++) {
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.015, 0.07), matPlastic);
+        blade.position.x = 0.18;
+        blade.rotation.x = 0.35;
+        const p = new THREE.Group();
+        p.rotation.y = (b / 7) * Math.PI * 2;
+        p.add(blade);
+        fanPivot.add(p);
+      }
+      spinningFans.push({ mesh: fanPivot, axis: 'y' });
+      gpuGroup.add(fanPivot);
+    });
+    tagClickable(gpuGroup, 'gpu');
+
+    // --- PART 10: 1000W MODULAR POWER SUPPLY (PSU) ---
+    const psuGroup = registerPart(
+      'psu',
+      '1000W 80+ Platinum Modular PSU',
+      'Fully modular ATX 3.1 power supply with native 12V-2x6 PCIe 5.1 connector and zero-RPM silent fan.',
+      new THREE.Vector3(-1.05, -1.32, 0),
+      new THREE.Vector3(-2.35, -0.35, 0.75)
+    );
+    const psuBox = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.78, 1.35), matSteelBlack);
+    const psuGrill = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.03, 24), matAluminum);
+    psuGrill.position.y = 0.4;
+    psuGroup.add(psuBox, psuGrill);
+    // Modular Ports
+    for (let r = 0; r < 2; r++) {
+      for (let c = 0; c < 4; c++) {
+        const port = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.16, 0.22), matPlastic);
+        port.position.set(0.74, -0.15 + r * 0.28, -0.42 + c * 0.28);
+        psuGroup.add(port);
+      }
+    }
+    tagClickable(psuGroup, 'psu');
+
+    // 5. INTERACTION, SELECTION & ANIMATION STATE
+    let targetExplode = 0;
+    let currentExplode = 0;
+    let selectedPartId = null;
+    let isolatedMode = false;
+
+    const slider = document.getElementById('explodeSlider');
+    const toggleBtn = document.getElementById('toggleExplodeBtn');
+    const resetViewBtn = document.getElementById('resetViewBtn');
+    const infoCard = document.getElementById('infoCard');
+    const partTitle = document.getElementById('partTitle');
+    const partDesc = document.getElementById('partDesc');
+    const isolateBtn = document.getElementById('isolateBtn');
+    const resetSelectionBtn = document.getElementById('resetSelectionBtn');
+    const pills = document.querySelectorAll('.pill');
+
+    function updateVisibility() {
+      Object.values(parts).forEach((p) => {
+        if (isolatedMode && selectedPartId && p.id !== selectedPartId) {
+          p.group.visible = false;
+        } else {
+          p.group.visible = true;
+        }
+      });
+    }
+
+    function selectPart(partId) {
+      if (!partId || partId === 'all') {
+        selectedPartId = null;
+        isolatedMode = false;
+        infoCard.classList.remove('visible');
+        pills.forEach((btn) => btn.classList.toggle('active', btn.dataset.part === 'all'));
+        updateVisibility();
+        return;
+      }
+
+      selectedPartId = partId;
+      const p = parts[partId];
+      partTitle.textContent = p.name;
+      partDesc.textContent = p.description;
+      infoCard.classList.add('visible');
+      isolateBtn.textContent = isolatedMode ? 'Un-isolate' : 'Isolate Part';
+
+      pills.forEach((btn) => btn.classList.toggle('active', btn.dataset.part === partId));
+      updateVisibility();
+    }
+
+    pills.forEach((btn) => {
+      btn.addEventListener('click', () => selectPart(btn.dataset.part));
+    });
+
+    isolateBtn.addEventListener('click', () => {
+      isolatedMode = !isolatedMode;
+      isolateBtn.textContent = isolatedMode ? 'Un-isolate' : 'Isolate Part';
+      updateVisibility();
+    });
+
+    resetSelectionBtn.addEventListener('click', () => selectPart('all'));
+
+    slider.addEventListener('input', (e) => {
+      targetExplode = parseFloat(e.target.value);
+      toggleBtn.textContent = targetExplode > 0.5 ? 'Assemble All' : 'Disassemble All';
+    });
+
+    toggleBtn.addEventListener('click', () => {
+      targetExplode = targetExplode > 0.5 ? 0 : 1;
+      slider.value = targetExplode;
+      toggleBtn.textContent = targetExplode > 0.5 ? 'Assemble All' : 'Disassemble All';
+    });
+
+    resetViewBtn.addEventListener('click', () => {
+  selectPart('all');
+  targetExplode = 0;
+  currentExplode = 0;
+  isolatedMode = false;
+});
+
+
+    // Raycaster for clicking 3D hardware parts directly
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    let pointerDownPos = { x: 0, y: 0 };
+
+    const arScene = document.querySelector('a-scene');
+
+arScene.addEventListener('click', (event) => {
+  if (!arScene.camera || !arScene.canvas) return;
+
+  const rect = arScene.canvas.getBoundingClientRect();
+
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(pointer, arScene.camera);
+
+  const visibleMeshes = clickableMeshes.filter(
+    (m) => m.parent && m.parent.visible
+  );
+
+  const hits = raycaster.intersectObjects(visibleMeshes, true);
+
+  if (hits.length > 0) {
+    const hitId = hits[0].object.userData.partId;
+    if (hitId) {
+      selectPart(hitId === selectedPartId ? 'all' : hitId);
+    }
+  }
+});
+
+
+    // 6. RENDER & ANIMATION LOOP
+    function animate() {
+      requestAnimationFrame(animate);
+
+      currentExplode += (targetExplode - currentExplode) * 0.08;
+
+      Object.values(parts).forEach((p) => {
+        const isSelected = p.id === selectedPartId && !isolatedMode;
+        const boost = isSelected ? 0.55 : 0;
+        const factor = Math.min(1.35, currentExplode + boost);
+
+        const targetPos = p.basePos.clone().addScaledVector(p.explodeOffset, factor);
+        p.group.position.lerp(targetPos, 0.12);
+      });
+
+      // Spin cooling fans
+      spinningFans.forEach((fan) => {
+        fan.mesh.rotation[fan.axis] += 0.14;
+      });
+
+      
+    }
+
+    animate();
+  </script>
+</body>
+</html>
